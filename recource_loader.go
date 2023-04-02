@@ -10,7 +10,9 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"image"
 	"io/ioutil"
+	"math/rand"
 	"path/filepath"
+	"time"
 )
 
 func loadCarImages() (*ebiten.Image, *ebiten.Image, error) {
@@ -50,7 +52,11 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 }
 
 func loadFrontCars() ([]*entity.FrontCar, error) {
+	rand.Seed(time.Now().UnixNano())
+
 	colors := [10]string{"blue.png", "dark-orange.png", "dark-red.png", "dark-yellow.png", "green.png", "grey.png", "light-blue.png", "magenta.png", "purple.png", "yellow.png"}
+	velocityXValues := []float64{-0.9, -0.1, 0.1, 0.9}
+
 	var cars []*entity.FrontCar
 	for _, color := range colors {
 		var car entity.FrontCar
@@ -62,11 +68,17 @@ func loadFrontCars() ([]*entity.FrontCar, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		velocityXRandomIndex := rand.Intn(len(velocityXValues))
+
 		car = entity.FrontCar{
-			VelocityY:     3,
+			VelocityX:     velocityXValues[velocityXRandomIndex],
+			VelocityY:     0.5,
+			ScaleX:        0.01,
+			ScaleY:        0.01,
 			CollisionBox:  image.Rectangle{},
 			X:             screenWidth / 2,
-			Y:             -100,
+			Y:             screenHeight / 2,
 			Car:           nil,
 			Img:           img,
 			ImgName:       "img\\front-car\\dmc\\no-lights\\" + color,
@@ -83,7 +95,10 @@ func loadBackgroundMusic() (*audio.Player, error) {
 	audioContext := audio.NewContext(44100)
 
 	// Загрузка аудиофайла.
-	file, err := ebitenutil.OpenFile("music\\media-player\\track1.mp3")
+	rand.Seed(time.Now().UnixNano())
+	trackNames := []string{"track1.mp3", "The_Crystal_Method_-_Born_too_Slow.mp3", "Static-X_-_The_Only.mp3", "Snoop_Dogg_The_Doors_-_Riders_On_The_Storm.mp3", "Ying_Yang_Twins_Lil_Jon_The_East_Side_Boyz_-_Get_Low.mp3"}
+	trackName := rand.Intn(len(trackNames))
+	file, err := ebitenutil.OpenFile("music\\media-player\\" + trackNames[trackName])
 	if err != nil {
 		return nil, err
 	}

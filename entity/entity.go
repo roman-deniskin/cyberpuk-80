@@ -17,7 +17,10 @@ type OutcomingObjects struct {
 }
 
 type FrontCar struct {
+	VelocityX     float64
 	VelocityY     float64
+	ScaleX        float64
+	ScaleY        float64
 	CollisionBox  image.Rectangle
 	X, Y          float64
 	Car           *DMC

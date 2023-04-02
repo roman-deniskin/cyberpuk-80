@@ -9,11 +9,13 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
+	"math/rand"
 )
 
 const (
-	screenWidth  = 1920
-	screenHeight = 1080
+	screenWidth   = 1920
+	screenHeight  = 1080
+	spawnInterval = 9600 // Интервал в кадрах
 )
 
 type Game struct {
@@ -24,8 +26,10 @@ type Game struct {
 	bgDelayMultiplier float32
 	Car               entity.Car
 	OutcomingObjects  entity.OutcomingObjects
+	GamingObjects     entity.OutcomingObjects
 	isStopping        bool
 	Menu              entity.Menu
+	spawnTimer        float64
 }
 
 func createCar(x, y, velocityY float64, img *ebiten.Image) entity.FrontCar {
@@ -41,6 +45,9 @@ func createCar(x, y, velocityY float64, img *ebiten.Image) entity.FrontCar {
 }
 
 func (g *Game) Update() error {
+	g.spawnTimer += ebiten.CurrentTPS()
+	//fmt.Println("interval", g.spawnTimer)
+
 	maxXCordCar := float64(screenWidth - g.Car.CarBounds.Max.X)
 
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
@@ -94,8 +101,32 @@ func (g *Game) Update() error {
 		g.bgmPlayer.Play()         // Запустите музыку
 	}
 
-	for i, car := range g.OutcomingObjects.FrontCar {
-		car.Y += car.VelocityY
+	// Создание машинки
+	if g.spawnTimer >= spawnInterval {
+		fmt.Println("spawn car")
+		fmt.Println("gaming objects len: ", len(g.OutcomingObjects.FrontCar))
+		originalFrontCar := g.OutcomingObjects.FrontCar[rand.Intn(len(g.OutcomingObjects.FrontCar))]
+		newFrontCar := copyFrontCar(originalFrontCar)
+		g.GamingObjects.FrontCar = append(g.GamingObjects.FrontCar, &newFrontCar)
+
+		g.spawnTimer = 0
+	}
+
+	carVelocityCoef := 0.0
+	for i, car := range g.GamingObjects.FrontCar {
+		carVelocityCoef = car.Y - screenHeight/2
+
+		var carVelocityX float64
+		if car.VelocityX > 0 {
+			carVelocityX = car.VelocityX + carVelocityCoef/100
+		} else {
+			carVelocityX = car.VelocityX - carVelocityCoef/100
+		}
+		fmt.Println("car velocity", carVelocityX)
+		car.Y = car.Y + car.VelocityY + carVelocityCoef/200
+		car.X += carVelocityX
+		car.ScaleX += carVelocityCoef / 200 / 250
+		car.ScaleY += carVelocityCoef / 200 / 250
 
 		// Проверка столкновения
 		carRect := image.Rect(int(g.Car.CarX), screenHeight-g.Car.CarBounds.Max.Y, int(g.Car.CarX)+g.Car.CarBounds.Max.X, screenHeight)
@@ -110,7 +141,7 @@ func (g *Game) Update() error {
 			// здесь можно обработать столкновение, например, завершить игру
 		}
 
-		g.OutcomingObjects.FrontCar[i] = car
+		g.GamingObjects.FrontCar[i] = car
 	}
 
 	return nil
@@ -128,17 +159,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		car = g.Car.CarStoppingImg
 	}
 
-	for _, frontCar := range g.OutcomingObjects.FrontCar {
-		borderOpts := &ebiten.DrawImageOptions{}
-		scaleX, scaleY := 0.5, 0.5 // коэффициенты масштабирования по осям X и Y
-		borderOpts.GeoM.Scale(scaleX, scaleY)
-		borderOpts.GeoM.Translate(frontCar.X, frontCar.Y)
-		fmt.Println(frontCar.ImgName)
-		screen.DrawImage(frontCar.Img, borderOpts)
-	}
-
 	opts.GeoM.Translate(g.Car.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
 	screen.DrawImage(car, opts)
+
+	for _, frontCar := range g.GamingObjects.FrontCar {
+		borderOpts := &ebiten.DrawImageOptions{}
+		borderOpts.GeoM.Scale(frontCar.ScaleX, frontCar.ScaleY)
+		borderOpts.GeoM.Translate(frontCar.X, frontCar.Y)
+		//fmt.Println(frontCar.ImgName)
+		screen.DrawImage(frontCar.Img, borderOpts)
+	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -156,5 +186,22 @@ func main() {
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalf("failed to run game: %v", err)
+	}
+}
+
+func copyFrontCar(original *entity.FrontCar) entity.FrontCar {
+	return entity.FrontCar{
+		VelocityX:     original.VelocityX,
+		VelocityY:     original.VelocityY,
+		ScaleX:        original.ScaleX,
+		ScaleY:        original.ScaleY,
+		CollisionBox:  original.CollisionBox,
+		X:             original.X,
+		Y:             original.Y,
+		Car:           original.Car,
+		Img:           original.Img,
+		ImgName:       original.ImgName,
+		LightsImg:     original.LightsImg,
+		LightsImgName: original.LightsImgName,
 	}
 }
