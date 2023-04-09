@@ -17,12 +17,12 @@ type OutcomingObjects struct {
 }
 
 type FrontCar struct {
-	VelocityX     float64
-	VelocityY     float64
+	WidthOffset   float64
 	ScaleX        float64
 	ScaleY        float64
 	CollisionBox  image.Rectangle
 	X, Y          float64
+	Speed         float64
 	Car           *DMC
 	Img           *ebiten.Image
 	ImgName       string

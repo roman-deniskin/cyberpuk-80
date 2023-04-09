@@ -16,11 +16,11 @@ import (
 )
 
 func loadCarImages() (*ebiten.Image, *ebiten.Image, error) {
-	car, _, err := ebitenutil.NewImageFromFile("img\\my-car\\dmc-24.png")
+	car, _, err := ebitenutil.NewImageFromFile("img\\my-car\\dmc-24-mini.png")
 	if err != nil {
 		return nil, nil, err
 	}
-	carLights, _, err := ebitenutil.NewImageFromFile("img\\my-car\\dmc-lights-24.png")
+	carLights, _, err := ebitenutil.NewImageFromFile("img\\my-car\\dmc-lights-24-mini.png")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -55,7 +55,7 @@ func loadFrontCars() ([]*entity.FrontCar, error) {
 	rand.Seed(time.Now().UnixNano())
 
 	colors := [10]string{"blue.png", "dark-orange.png", "dark-red.png", "dark-yellow.png", "green.png", "grey.png", "light-blue.png", "magenta.png", "purple.png", "yellow.png"}
-	velocityXValues := []float64{-0.9, -0.1, 0.1, 0.9}
+	widthOffsets := []float64{-1000, -450, 100, 600}
 
 	var cars []*entity.FrontCar
 	for _, color := range colors {
@@ -69,13 +69,10 @@ func loadFrontCars() ([]*entity.FrontCar, error) {
 			return nil, err
 		}
 
-		velocityXRandomIndex := rand.Intn(len(velocityXValues))
+		widthOffsetRandomIndex := rand.Intn(len(widthOffsets))
 
 		car = entity.FrontCar{
-			VelocityX:     velocityXValues[velocityXRandomIndex],
-			VelocityY:     0.5,
-			ScaleX:        0.01,
-			ScaleY:        0.01,
+			WidthOffset:   widthOffsets[widthOffsetRandomIndex],
 			CollisionBox:  image.Rectangle{},
 			X:             screenWidth / 2,
 			Y:             screenHeight / 2,
@@ -154,8 +151,11 @@ func NewGame() (*Game, error) {
 		OutcomingObjects: entity.OutcomingObjects{
 			FrontCar: frontCars,
 		},
-		roadImages:        roadImages,
-		bgmPlayer:         bgmPlayer,
-		bgDelayMultiplier: 3,
+		roadImages:           roadImages,
+		bgmPlayer:            bgmPlayer,
+		bgDelayMultiplier:    3,
+		initialDeceleration:  500000000,
+		spawnInterval:        4900,
+		decelerationInterval: 4900,
 	}, nil
 }

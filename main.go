@@ -9,32 +9,37 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
+	"math"
 	"math/rand"
 )
 
 const (
-	screenWidth   = 1920
-	screenHeight  = 1080
-	spawnInterval = 9600 // Интервал в кадрах
+	screenWidth  = 1920
+	screenHeight = 1080
+	spawnWidth   = 960
+	spawnHeight  = 540
 )
 
 type Game struct {
-	bgmPlayer         *audio.Player
-	roadImages        []*ebiten.Image
-	bgIndex           int
-	bgDelay           float32
-	bgDelayMultiplier float32
-	Car               entity.Car
-	OutcomingObjects  entity.OutcomingObjects
-	GamingObjects     entity.OutcomingObjects
-	isStopping        bool
-	Menu              entity.Menu
-	spawnTimer        float64
+	bgmPlayer            *audio.Player
+	roadImages           []*ebiten.Image
+	bgIndex              int
+	bgDelay              float32
+	bgDelayMultiplier    float32
+	Car                  entity.Car
+	OutcomingObjects     entity.OutcomingObjects
+	GamingObjects        entity.OutcomingObjects
+	isStopping           bool
+	Menu                 entity.Menu
+	spawnTimer           float64
+	decelerationTimer    float64
+	initialDeceleration  float64
+	spawnInterval        float64
+	decelerationInterval float64
 }
 
 func createCar(x, y, velocityY float64, img *ebiten.Image) entity.FrontCar {
 	return entity.FrontCar{
-		VelocityY:    velocityY,
 		CollisionBox: img.Bounds(),
 		X:            x,
 		Y:            y,
@@ -46,6 +51,7 @@ func createCar(x, y, velocityY float64, img *ebiten.Image) entity.FrontCar {
 
 func (g *Game) Update() error {
 	g.spawnTimer += ebiten.CurrentTPS()
+	g.decelerationTimer += ebiten.CurrentTPS()
 	//fmt.Println("interval", g.spawnTimer)
 
 	maxXCordCar := float64(screenWidth - g.Car.CarBounds.Max.X)
@@ -102,31 +108,40 @@ func (g *Game) Update() error {
 	}
 
 	// Создание машинки
-	if g.spawnTimer >= spawnInterval {
-		fmt.Println("spawn car")
-		fmt.Println("gaming objects len: ", len(g.OutcomingObjects.FrontCar))
+	if g.spawnTimer >= g.spawnInterval {
 		originalFrontCar := g.OutcomingObjects.FrontCar[rand.Intn(len(g.OutcomingObjects.FrontCar))]
 		newFrontCar := copyFrontCar(originalFrontCar)
 		g.GamingObjects.FrontCar = append(g.GamingObjects.FrontCar, &newFrontCar)
 
+		// Определяем частосту спавна встречек
+		if g.spawnInterval > 1960 {
+			g.spawnInterval -= 100
+		}
 		g.spawnTimer = 0
 	}
 
-	carVelocityCoef := 0.0
-	for i, car := range g.GamingObjects.FrontCar {
-		carVelocityCoef = car.Y - screenHeight/2
-
-		var carVelocityX float64
-		if car.VelocityX > 0 {
-			carVelocityX = car.VelocityX + carVelocityCoef/100
-		} else {
-			carVelocityX = car.VelocityX - carVelocityCoef/100
+	// Определяем замедление встречных машин
+	if g.decelerationTimer >= g.decelerationInterval {
+		if g.initialDeceleration > 10000000 {
+			g.initialDeceleration -= 10000000
 		}
-		fmt.Println("car velocity", carVelocityX)
-		car.Y = car.Y + car.VelocityY + carVelocityCoef/200
-		car.X += carVelocityX
-		car.ScaleX += carVelocityCoef / 200 / 250
-		car.ScaleY += carVelocityCoef / 200 / 250
+
+		if g.decelerationInterval > 10 {
+			g.decelerationInterval -= 10
+		}
+
+		g.decelerationTimer = 0
+	}
+
+	for i, car := range g.GamingObjects.FrontCar {
+		scaleCoef := (1 / (spawnHeight / (car.Y - spawnHeight)))
+
+		car.Speed += ebiten.CurrentTPS() / 300
+		car.Y = car.Y + scaleCoef + (math.Pow(car.Speed, 5) / g.initialDeceleration)
+
+		car.X = spawnWidth + (car.WidthOffset / (spawnHeight / (car.Y - spawnHeight)))
+		car.ScaleX = scaleCoef
+		car.ScaleY = scaleCoef
 
 		// Проверка столкновения
 		carRect := image.Rect(int(g.Car.CarX), screenHeight-g.Car.CarBounds.Max.Y, int(g.Car.CarX)+g.Car.CarBounds.Max.X, screenHeight)
@@ -153,14 +168,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	bgOpts := &ebiten.DrawImageOptions{}
 	screen.DrawImage(bgImg, bgOpts)
 
-	opts := &ebiten.DrawImageOptions{}
+	carOpts := &ebiten.DrawImageOptions{}
 	car := g.Car.CarRiddingImg
 	if g.isStopping {
 		car = g.Car.CarStoppingImg
 	}
 
-	opts.GeoM.Translate(g.Car.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
-	screen.DrawImage(car, opts)
+	carOpts.GeoM.Translate(g.Car.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
+	screen.DrawImage(car, carOpts)
 
 	for _, frontCar := range g.GamingObjects.FrontCar {
 		borderOpts := &ebiten.DrawImageOptions{}
@@ -191,13 +206,13 @@ func main() {
 
 func copyFrontCar(original *entity.FrontCar) entity.FrontCar {
 	return entity.FrontCar{
-		VelocityX:     original.VelocityX,
-		VelocityY:     original.VelocityY,
 		ScaleX:        original.ScaleX,
 		ScaleY:        original.ScaleY,
+		WidthOffset:   original.WidthOffset,
 		CollisionBox:  original.CollisionBox,
 		X:             original.X,
 		Y:             original.Y,
+		Speed:         original.Speed,
 		Car:           original.Car,
 		Img:           original.Img,
 		ImgName:       original.ImgName,
