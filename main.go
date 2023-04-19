@@ -28,6 +28,11 @@ const (
 	spawnHeight  = 540
 )
 
+const (
+	gameStatePlaying = iota
+	gameStateGameOver
+)
+
 type Game struct {
 	bgmPlayer            *audio.Player
 	roadImages           []*ebiten.Image
@@ -47,6 +52,7 @@ type Game struct {
 	score                int
 	carsOnScreen         map[int]*entity.FrontCar
 	gameFont             font.Face
+	gameState            int
 }
 
 func createCar(x, y, velocityY float64, img *ebiten.Image) entity.FrontCar {
@@ -61,9 +67,24 @@ func createCar(x, y, velocityY float64, img *ebiten.Image) entity.FrontCar {
 }
 
 func (g *Game) Update() error {
+	switch g.gameState {
+	case gameStatePlaying:
+		err := g.UpdatePlaying()
+		if err != nil {
+			return err
+		}
+	case gameStateGameOver:
+		if ebiten.IsKeyPressed(ebiten.KeyEnter) {
+			g.restart()
+		}
+	}
+
+	return nil
+}
+
+func (g *Game) UpdatePlaying() error {
 	g.spawnTimer += ebiten.CurrentTPS()
 	g.decelerationTimer += ebiten.CurrentTPS()
-	//fmt.Println("interval", g.spawnTimer)
 
 	maxXCordCar := float64(screenWidth - g.Car.CarBounds.Max.X)
 
@@ -158,24 +179,43 @@ func (g *Game) Update() error {
 		if car.Y >= screenHeight {
 			g.score++
 			delete(g.carsOnScreen, i)
-			fmt.Println("car: ", i, " has been removed")
 		}
 
 		// Проверка столкновения
 		carRect := image.Rect(int(g.Car.CarX), screenHeight-g.Car.CarBounds.Max.Y, int(g.Car.CarX)+g.Car.CarBounds.Max.X, screenHeight)
+
+		carWidth, carHeight := car.Img.Size()
 		borderRect := image.Rect(
 			int(car.X), int(car.Y),
-			int(car.X)+int(float64(car.CollisionBox.Max.X)*0.5),
-			int(car.Y)+int(float64(car.CollisionBox.Max.Y)*0.5),
+			int(car.X)+int(float64(carWidth)*car.ScaleX),
+			int(car.Y)+int(float64(carHeight)*car.ScaleY),
 		)
 
 		if carRect.Overlaps(borderRect) {
-			fmt.Println("Collision detected!")
-			// здесь можно обработать столкновение, например, завершить игру
+			g.gameState = gameStateGameOver
 		}
 	}
 
 	return nil
+}
+
+func (g *Game) restart() {
+	g.Car.CarX = float64(screenWidth) / 2
+	carsOnScreen := make(map[int]*entity.FrontCar)
+	g.initialDeceleration = 500000000
+	g.spawnInterval = 4900
+	g.decelerationInterval = 4900
+	g.score = 0
+	g.carsOnScreen = carsOnScreen
+	g.gameState = gameStatePlaying
+}
+
+func (g *Game) drawGameOver(screen *ebiten.Image) {
+	msg := fmt.Sprintf("GAME OVER\nYOUR SCORE:  %d\nPRESS ENTER", g.score)
+	x := (screenWidth - text.BoundString(g.gameFont, msg).Dx()) / 2
+	y := screenHeight / 2
+	white := color.RGBA{255, 255, 255, 255}
+	text.Draw(screen, msg, g.gameFont, x, y, white)
 }
 
 func (g *Game) drawScore(screen *ebiten.Image) {
@@ -184,27 +224,31 @@ func (g *Game) drawScore(screen *ebiten.Image) {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	bgImg := g.roadImages[g.bgIndex]
+	switch g.gameState {
+	case gameStatePlaying:
+		bgImg := g.roadImages[g.bgIndex]
 
-	bgOpts := &ebiten.DrawImageOptions{}
-	screen.DrawImage(bgImg, bgOpts)
+		bgOpts := &ebiten.DrawImageOptions{}
+		screen.DrawImage(bgImg, bgOpts)
 
-	carOpts := &ebiten.DrawImageOptions{}
-	car := g.Car.CarRiddingImg
-	if g.isStopping {
-		car = g.Car.CarStoppingImg
-	}
+		carOpts := &ebiten.DrawImageOptions{}
+		car := g.Car.CarRiddingImg
+		if g.isStopping {
+			car = g.Car.CarStoppingImg
+		}
 
-	carOpts.GeoM.Translate(g.Car.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
-	screen.DrawImage(car, carOpts)
-	g.drawScore(screen)
+		carOpts.GeoM.Translate(g.Car.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
+		screen.DrawImage(car, carOpts)
+		g.drawScore(screen)
 
-	for _, frontCar := range g.carsOnScreen {
-		borderOpts := &ebiten.DrawImageOptions{}
-		borderOpts.GeoM.Scale(frontCar.ScaleX, frontCar.ScaleY)
-		borderOpts.GeoM.Translate(frontCar.X, frontCar.Y)
-		//fmt.Println(frontCar.ImgName)
-		screen.DrawImage(frontCar.Img, borderOpts)
+		for _, frontCar := range g.carsOnScreen {
+			borderOpts := &ebiten.DrawImageOptions{}
+			borderOpts.GeoM.Scale(frontCar.ScaleX, frontCar.ScaleY)
+			borderOpts.GeoM.Translate(frontCar.X, frontCar.Y)
+			screen.DrawImage(frontCar.Img, borderOpts)
+		}
+	case gameStateGameOver:
+		g.drawGameOver(screen)
 	}
 }
 
