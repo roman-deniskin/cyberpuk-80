@@ -17,6 +17,7 @@ type OutcomingObjects struct {
 }
 
 type FrontCar struct {
+	Id            int
 	WidthOffset   float64
 	ScaleX        float64
 	ScaleY        float64

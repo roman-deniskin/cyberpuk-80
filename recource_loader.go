@@ -8,10 +8,15 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 	"image"
 	"io/ioutil"
+	"log"
 	"math/rand"
+	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"time"
 )
 
@@ -28,12 +33,18 @@ func loadCarImages() (*ebiten.Image, *ebiten.Image, error) {
 }
 
 func loadRoadImages() ([]*ebiten.Image, error) {
-	roadImages := []*ebiten.Image{}
+	// Создание файла профиля памяти
+	f, err := os.Create("mem_before_loading_resources.pprof")
+	if err != nil {
+		log.Fatal("Could not create memory profile: ", err)
+	}
+	defer f.Close()
 
 	files, err := ioutil.ReadDir("img\\road\\jpg")
 	if err != nil {
 		return nil, err
 	}
+	roadImages := make([]*ebiten.Image, 0, len(files))
 
 	for _, file := range files {
 		filename := filepath.Join("img\\road\\jpg", file.Name())
@@ -48,6 +59,9 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 		return nil, errors.New("no road frame images found")
 	}
 
+	if err := pprof.WriteHeapProfile(f); err != nil {
+		log.Fatal("Could not write memory profile: ", err)
+	}
 	return roadImages, nil
 }
 
@@ -118,6 +132,24 @@ func loadBackgroundMusic() (*audio.Player, error) {
 	return player, nil
 }
 
+func loadGameFont() (font.Face, error) {
+	fontBytes, err := ioutil.ReadFile("Mario-Kart-DS.ttf")
+	if err != nil {
+		return nil, err
+	}
+	tt, err := opentype.Parse(fontBytes) // Замените 'yourFontData' на данные шрифта Mario Kart DS
+	if err != nil {
+		return nil, err
+	}
+
+	const dpi = 72
+	return opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    48, // размер шрифта
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+}
+
 // Инициализирует ресурсы при запуске игры
 func NewGame() (*Game, error) {
 	// Автомобиль игрока
@@ -140,6 +172,11 @@ func NewGame() (*Game, error) {
 		return nil, fmt.Errorf("failed to load background music: %w", err)
 	}
 	carBounds := carRiddingImg.Bounds()
+	carsOnScreen := make(map[int]*entity.FrontCar)
+	gameFont, err := loadGameFont()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load game font: %w", err)
+	}
 
 	return &Game{
 		Car: entity.Car{
@@ -157,5 +194,8 @@ func NewGame() (*Game, error) {
 		initialDeceleration:  500000000,
 		spawnInterval:        4900,
 		decelerationInterval: 4900,
+		score:                0,
+		carsOnScreen:         carsOnScreen,
+		gameFont:             gameFont,
 	}, nil
 }

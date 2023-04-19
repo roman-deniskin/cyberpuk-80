@@ -2,15 +2,23 @@ package main
 
 import (
 	"cyberpuk-80/entity"
+	"errors"
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/text"
+	"golang.org/x/image/font"
 	"image"
+	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
 	"math"
 	"math/rand"
+	"os"
+	"runtime/pprof"
+	"strconv"
+	"time"
 )
 
 const (
@@ -36,6 +44,9 @@ type Game struct {
 	initialDeceleration  float64
 	spawnInterval        float64
 	decelerationInterval float64
+	score                int
+	carsOnScreen         map[int]*entity.FrontCar
+	gameFont             font.Face
 }
 
 func createCar(x, y, velocityY float64, img *ebiten.Image) entity.FrontCar {
@@ -56,6 +67,9 @@ func (g *Game) Update() error {
 
 	maxXCordCar := float64(screenWidth - g.Car.CarBounds.Max.X)
 
+	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
+		return errors.New("Выход по нажатию на клавишу Escape")
+	}
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
 		if g.Car.CarX > maxXCordCar*0.2 {
 			g.Car.CarX -= 8
@@ -110,8 +124,9 @@ func (g *Game) Update() error {
 	// Создание машинки
 	if g.spawnTimer >= g.spawnInterval {
 		originalFrontCar := g.OutcomingObjects.FrontCar[rand.Intn(len(g.OutcomingObjects.FrontCar))]
-		newFrontCar := copyFrontCar(originalFrontCar)
-		g.GamingObjects.FrontCar = append(g.GamingObjects.FrontCar, &newFrontCar)
+		fmt.Println("before: ", len(g.carsOnScreen))
+		g.carsOnScreen[int(time.Now().Unix())] = copyFrontCar(originalFrontCar)
+		fmt.Println("after: ", len(g.carsOnScreen))
 
 		// Определяем частосту спавна встречек
 		if g.spawnInterval > 1960 {
@@ -133,7 +148,7 @@ func (g *Game) Update() error {
 		g.decelerationTimer = 0
 	}
 
-	for i, car := range g.GamingObjects.FrontCar {
+	for i, car := range g.carsOnScreen {
 		scaleCoef := (1 / (spawnHeight / (car.Y - spawnHeight)))
 
 		car.Speed += ebiten.CurrentTPS() / 300
@@ -142,6 +157,11 @@ func (g *Game) Update() error {
 		car.X = spawnWidth + (car.WidthOffset / (spawnHeight / (car.Y - spawnHeight)))
 		car.ScaleX = scaleCoef
 		car.ScaleY = scaleCoef
+		if car.Y >= screenHeight {
+			g.score++
+			delete(g.carsOnScreen, i)
+			fmt.Println("car: ", i, " has been removed")
+		}
 
 		// Проверка столкновения
 		carRect := image.Rect(int(g.Car.CarX), screenHeight-g.Car.CarBounds.Max.Y, int(g.Car.CarX)+g.Car.CarBounds.Max.X, screenHeight)
@@ -155,11 +175,14 @@ func (g *Game) Update() error {
 			fmt.Println("Collision detected!")
 			// здесь можно обработать столкновение, например, завершить игру
 		}
-
-		g.GamingObjects.FrontCar[i] = car
 	}
 
 	return nil
+}
+
+func (g *Game) drawScore(screen *ebiten.Image) {
+	yellow := color.RGBA{255, 255, 0, 255}                                             // желтый цвет
+	text.Draw(screen, strconv.Itoa(g.score), g.gameFont, screenWidth-200, 100, yellow) // отступы 10 пикселей сверху и слева
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -176,8 +199,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	carOpts.GeoM.Translate(g.Car.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
 	screen.DrawImage(car, carOpts)
+	g.drawScore(screen)
 
-	for _, frontCar := range g.GamingObjects.FrontCar {
+	for _, frontCar := range g.carsOnScreen {
 		borderOpts := &ebiten.DrawImageOptions{}
 		borderOpts.GeoM.Scale(frontCar.ScaleX, frontCar.ScaleY)
 		borderOpts.GeoM.Translate(frontCar.X, frontCar.Y)
@@ -191,6 +215,13 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
+	// Создание файла профиля памяти
+	f, err := os.Create("mem.pprof")
+	if err != nil {
+		log.Fatal("Could not create memory profile: ", err)
+	}
+	defer f.Close()
+
 	game, err := NewGame()
 	if err != nil {
 		log.Fatalf("failed to create game: %v", err)
@@ -202,10 +233,15 @@ func main() {
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalf("failed to run game: %v", err)
 	}
+
+	// Запись профиля памяти
+	if err := pprof.WriteHeapProfile(f); err != nil {
+		log.Fatal("Could not write memory profile: ", err)
+	}
 }
 
-func copyFrontCar(original *entity.FrontCar) entity.FrontCar {
-	return entity.FrontCar{
+func copyFrontCar(original *entity.FrontCar) *entity.FrontCar {
+	return &entity.FrontCar{
 		ScaleX:        original.ScaleX,
 		ScaleY:        original.ScaleY,
 		WidthOffset:   original.WidthOffset,
