@@ -124,9 +124,7 @@ func (g *Game) Update() error {
 	// Создание машинки
 	if g.spawnTimer >= g.spawnInterval {
 		originalFrontCar := g.OutcomingObjects.FrontCar[rand.Intn(len(g.OutcomingObjects.FrontCar))]
-		fmt.Println("before: ", len(g.carsOnScreen))
 		g.carsOnScreen[int(time.Now().Unix())] = copyFrontCar(originalFrontCar)
-		fmt.Println("after: ", len(g.carsOnScreen))
 
 		// Определяем частосту спавна встречек
 		if g.spawnInterval > 1960 {
@@ -222,10 +220,16 @@ func main() {
 	}
 	defer f.Close()
 
+	startTime := time.Now()
+
 	game, err := NewGame()
 	if err != nil {
 		log.Fatalf("failed to create game: %v", err)
 	}
+
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	fmt.Println("Время выполнения функции NewGame:", duration)
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetWindowTitle("CyberPunk-80")

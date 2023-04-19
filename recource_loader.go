@@ -12,15 +12,16 @@ import (
 	"golang.org/x/image/font/opentype"
 	"image"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
-	"runtime/pprof"
+	"sync"
 	"time"
 )
 
 func loadCarImages() (*ebiten.Image, *ebiten.Image, error) {
+	startTime := time.Now()
+
 	car, _, err := ebitenutil.NewImageFromFile("img\\my-car\\dmc-24-mini.png")
 	if err != nil {
 		return nil, nil, err
@@ -29,43 +30,90 @@ func loadCarImages() (*ebiten.Image, *ebiten.Image, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	fmt.Println("Время выполнения функции loadCarImages:", duration)
+
 	return car, carLights, nil
 }
 
 func loadRoadImages() ([]*ebiten.Image, error) {
-	// Создание файла профиля памяти
-	f, err := os.Create("mem_before_loading_resources.pprof")
-	if err != nil {
-		log.Fatal("Could not create memory profile: ", err)
-	}
-	defer f.Close()
+	startTime := time.Now()
 
 	files, err := ioutil.ReadDir("img\\road\\jpg")
 	if err != nil {
 		return nil, err
 	}
-	roadImages := make([]*ebiten.Image, 0, len(files))
+	roadImages := make([]*ebiten.Image, len(files))
 
-	for _, file := range files {
-		filename := filepath.Join("img\\road\\jpg", file.Name())
-		img, _, err := ebitenutil.NewImageFromFile(filename)
-		if err != nil {
-			return nil, fmt.Errorf("error loading road frame image: %w", err)
-		}
-		roadImages = append(roadImages, img)
+	type fileWithIndex struct {
+		index int
+		file  os.FileInfo
 	}
 
-	if len(roadImages) == 0 {
+	type result struct {
+		index int
+		img   *ebiten.Image
+		err   error
+	}
+
+	workerCount := 4
+	workChan := make(chan fileWithIndex, len(files))
+	resultChan := make(chan result, len(files))
+	doneChan := make(chan struct{})
+
+	// Создаем рабочие горутины
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			for work := range workChan {
+				filename := filepath.Join("img\\road\\jpg", work.file.Name())
+				img, _, err := ebitenutil.NewImageFromFile(filename)
+				resultChan <- result{index: work.index, img: img, err: err}
+			}
+		}()
+	}
+
+	// В горутине отправителе передаем имена файлов и индексы в канал workChan
+	go func() {
+		for i, file := range files {
+			workChan <- fileWithIndex{index: i, file: file}
+		}
+		close(workChan)
+	}()
+
+	// В горутине обработчике результатов принимаем результаты из канала resultChan
+	go func() {
+		for i := 0; i < len(files); i++ {
+			res := <-resultChan
+			if res.err != nil {
+				err = res.err
+			}
+			roadImages[res.index] = res.img
+		}
+		doneChan <- struct{}{}
+	}()
+
+	<-doneChan // Ждем завершения работы горутин обработчика результатов
+
+	if err != nil { // Возвращаем ошибку, если есть
+		return nil, err
+	}
+
+	if len(roadImages) == 0 { // Возвращаем ошибку, если нет изображений
 		return nil, errors.New("no road frame images found")
 	}
 
-	if err := pprof.WriteHeapProfile(f); err != nil {
-		log.Fatal("Could not write memory profile: ", err)
-	}
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	fmt.Println("Время выполнения функции loadRoadImages:", duration)
+
 	return roadImages, nil
 }
 
 func loadFrontCars() ([]*entity.FrontCar, error) {
+	startTime := time.Now()
+
 	rand.Seed(time.Now().UnixNano())
 
 	colors := [10]string{"blue.png", "dark-orange.png", "dark-red.png", "dark-yellow.png", "green.png", "grey.png", "light-blue.png", "magenta.png", "purple.png", "yellow.png"}
@@ -98,10 +146,17 @@ func loadFrontCars() ([]*entity.FrontCar, error) {
 		}
 		cars = append(cars, &car)
 	}
+
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	fmt.Println("Время выполнения функции loadFrontCars:", duration)
+
 	return cars, nil
 }
 
 func loadBackgroundMusic() (*audio.Player, error) {
+	startTime := time.Now()
+
 	// Инициализация аудиосистемы Ebiten с предпочтительным частотой дискретизации.
 	audioContext := audio.NewContext(44100)
 
@@ -129,10 +184,16 @@ func loadBackgroundMusic() (*audio.Player, error) {
 		return nil, err
 	}
 
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	fmt.Println("Время выполнения функции loadBackgroundMusic:", duration)
+
 	return player, nil
 }
 
 func loadGameFont() (font.Face, error) {
+	startTime := time.Now()
+
 	fontBytes, err := ioutil.ReadFile("Mario-Kart-DS.ttf")
 	if err != nil {
 		return nil, err
@@ -143,6 +204,11 @@ func loadGameFont() (font.Face, error) {
 	}
 
 	const dpi = 72
+
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	fmt.Println("Время выполнения функции loadGameFont:", duration)
+
 	return opentype.NewFace(tt, &opentype.FaceOptions{
 		Size:    48, // размер шрифта
 		DPI:     dpi,
@@ -152,31 +218,64 @@ func loadGameFont() (font.Face, error) {
 
 // Инициализирует ресурсы при запуске игры
 func NewGame() (*Game, error) {
-	// Автомобиль игрока
-	carRiddingImg, carStoppingImg, err := loadCarImages()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load car image: %w", err)
-	}
-	// Трактор встречный
-	frontCars, err := loadFrontCars()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load border image: %w", err)
-	}
-	roadImages, err := loadRoadImages()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load road images: %w", err)
+	var carRiddingImg, carStoppingImg *ebiten.Image
+	var frontCars []*entity.FrontCar
+	var roadImages []*ebiten.Image
+	var bgmPlayer *audio.Player
+	var gameFont font.Face
+
+	var loadErr error
+	var wg sync.WaitGroup
+	wg.Add(5)
+
+	go func() {
+		defer wg.Done()
+		carRiddingImg, carStoppingImg, loadErr = loadCarImages()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load car image: %w", loadErr)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		frontCars, loadErr = loadFrontCars()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load border image: %w", loadErr)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		roadImages, loadErr = loadRoadImages()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load road images: %w", loadErr)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		bgmPlayer, loadErr = loadBackgroundMusic()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load background music: %w", loadErr)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		gameFont, loadErr = loadGameFont()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load game font: %w", loadErr)
+		}
+	}()
+
+	wg.Wait()
+
+	if loadErr != nil {
+		return nil, loadErr
 	}
 
-	bgmPlayer, err := loadBackgroundMusic()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load background music: %w", err)
-	}
 	carBounds := carRiddingImg.Bounds()
 	carsOnScreen := make(map[int]*entity.FrontCar)
-	gameFont, err := loadGameFont()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load game font: %w", err)
-	}
 
 	return &Game{
 		Car: entity.Car{
