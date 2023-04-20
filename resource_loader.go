@@ -10,7 +10,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
-	"image"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -45,6 +44,7 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	roadImages := make([]*ebiten.Image, len(files))
 
 	type fileWithIndex struct {
@@ -61,11 +61,13 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 	workerCount := 4
 	workChan := make(chan fileWithIndex, len(files))
 	resultChan := make(chan result, len(files))
-	doneChan := make(chan struct{})
 
-	// Создаем рабочие горутины
+	var wg sync.WaitGroup
+	wg.Add(workerCount)
+
 	for i := 0; i < workerCount; i++ {
 		go func() {
+			defer wg.Done()
 			for work := range workChan {
 				filename := filepath.Join("img\\road\\jpg", work.file.Name())
 				img, _, err := ebitenutil.NewImageFromFile(filename)
@@ -74,7 +76,6 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 		}()
 	}
 
-	// В горутине отправителе передаем имена файлов и индексы в канал workChan
 	go func() {
 		for i, file := range files {
 			workChan <- fileWithIndex{index: i, file: file}
@@ -82,25 +83,24 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 		close(workChan)
 	}()
 
-	// В горутине обработчике результатов принимаем результаты из канала resultChan
 	go func() {
-		for i := 0; i < len(files); i++ {
-			res := <-resultChan
-			if res.err != nil {
-				err = res.err
-			}
-			roadImages[res.index] = res.img
-		}
-		doneChan <- struct{}{}
+		wg.Wait()
+		close(resultChan)
 	}()
 
-	<-doneChan // Ждем завершения работы горутин обработчика результатов
+	for res := range resultChan {
+		if res.err != nil {
+			err = res.err
+			fmt.Println(err)
+		}
+		roadImages[res.index] = res.img
+	}
 
-	if err != nil { // Возвращаем ошибку, если есть
+	if err != nil {
 		return nil, err
 	}
 
-	if len(roadImages) == 0 { // Возвращаем ошибку, если нет изображений
+	if len(roadImages) == 0 {
 		return nil, errors.New("no road frame images found")
 	}
 
@@ -111,17 +111,14 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 	return roadImages, nil
 }
 
-func loadFrontCars() ([]*entity.FrontCar, error) {
+func loadFrontCarImages() ([]*entity.FrontCarImages, error) {
 	startTime := time.Now()
 
-	rand.Seed(time.Now().UnixNano())
-
 	colors := [10]string{"blue.png", "dark-orange.png", "dark-red.png", "dark-yellow.png", "green.png", "grey.png", "light-blue.png", "magenta.png", "purple.png", "yellow.png"}
-	widthOffsets := []float64{-1000, -450, 100, 600}
 
-	var cars []*entity.FrontCar
+	var cars []*entity.FrontCarImages
 	for _, color := range colors {
-		var car entity.FrontCar
+		var car entity.FrontCarImages
 		img, _, err := ebitenutil.NewImageFromFile("img\\front-car\\dmc\\no-lights\\" + color)
 		if err != nil {
 			return nil, err
@@ -131,18 +128,9 @@ func loadFrontCars() ([]*entity.FrontCar, error) {
 			return nil, err
 		}
 
-		widthOffsetRandomIndex := rand.Intn(len(widthOffsets))
-
-		car = entity.FrontCar{
-			WidthOffset:   widthOffsets[widthOffsetRandomIndex],
-			CollisionBox:  image.Rectangle{},
-			X:             screenWidth / 2,
-			Y:             screenHeight / 2,
-			Car:           nil,
-			Img:           img,
-			ImgName:       "img\\front-car\\dmc\\no-lights\\" + color,
-			LightsImg:     imgLights,
-			LightsImgName: "img\\front-car\\dmc\\lights\\" + color,
+		car = entity.FrontCarImages{
+			Img:       img,
+			ImgLights: imgLights,
 		}
 		cars = append(cars, &car)
 	}
@@ -157,10 +145,8 @@ func loadFrontCars() ([]*entity.FrontCar, error) {
 func loadBackgroundMusic() (*audio.Player, error) {
 	startTime := time.Now()
 
-	// Инициализация аудиосистемы Ebiten с предпочтительным частотой дискретизации.
 	audioContext := audio.NewContext(44100)
 
-	// Загрузка аудиофайла.
 	rand.Seed(time.Now().UnixNano())
 	trackNames := []string{"track1.mp3", "The_Crystal_Method_-_Born_too_Slow.mp3", "Static-X_-_The_Only.mp3", "Snoop_Dogg_The_Doors_-_Riders_On_The_Storm.mp3", "Ying_Yang_Twins_Lil_Jon_The_East_Side_Boyz_-_Get_Low.mp3"}
 	trackName := rand.Intn(len(trackNames))
@@ -176,10 +162,7 @@ func loadBackgroundMusic() (*audio.Player, error) {
 		return nil, err
 	}
 
-	// Создание плеера для аудиофайла.
 	player, err := audio.NewPlayer(audioContext, d)
-	// Закрытие файла после декодирования.
-	//file.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +181,7 @@ func loadGameFont() (font.Face, error) {
 	if err != nil {
 		return nil, err
 	}
-	tt, err := opentype.Parse(fontBytes) // Замените 'yourFontData' на данные шрифта Mario Kart DS
+	tt, err := opentype.Parse(fontBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -216,10 +199,9 @@ func loadGameFont() (font.Face, error) {
 	})
 }
 
-// Инициализирует ресурсы при запуске игры
-func NewGame() (*Game, error) {
+func ResourceInit() (*Game, error) {
 	var carRiddingImg, carStoppingImg *ebiten.Image
-	var frontCars []*entity.FrontCar
+	var frontCarImages []*entity.FrontCarImages
 	var roadImages []*ebiten.Image
 	var bgmPlayer *audio.Player
 	var gameFont font.Face
@@ -238,7 +220,7 @@ func NewGame() (*Game, error) {
 
 	go func() {
 		defer wg.Done()
-		frontCars, loadErr = loadFrontCars()
+		frontCarImages, loadErr = loadFrontCarImages()
 		if loadErr != nil {
 			loadErr = fmt.Errorf("failed to load border image: %w", loadErr)
 		}
@@ -274,27 +256,16 @@ func NewGame() (*Game, error) {
 		return nil, loadErr
 	}
 
-	carBounds := carRiddingImg.Bounds()
-	carsOnScreen := make(map[int]*entity.FrontCar)
-
 	return &Game{
-		Car: entity.Car{
+		MainCar: entity.Car{
 			CarRiddingImg:  carRiddingImg,
 			CarStoppingImg: carStoppingImg,
-			CarX:           float64(screenWidth) / 2,
-			CarBounds:      carBounds,
 		},
 		OutcomingObjects: entity.OutcomingObjects{
-			FrontCar: frontCars,
+			FrontCarImages: frontCarImages,
 		},
-		roadImages:           roadImages,
-		bgmPlayer:            bgmPlayer,
-		bgDelayMultiplier:    3,
-		initialDeceleration:  500000000,
-		spawnInterval:        4900,
-		decelerationInterval: 4900,
-		score:                0,
-		carsOnScreen:         carsOnScreen,
-		gameFont:             gameFont,
+		roadImages: roadImages,
+		bgmPlayer:  bgmPlayer,
+		gameFont:   gameFont,
 	}, nil
 }

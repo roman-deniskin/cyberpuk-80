@@ -2,37 +2,30 @@ package entity
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
-	"image"
 )
 
 type Car struct {
 	CarRiddingImg  *ebiten.Image
 	CarStoppingImg *ebiten.Image
 	CarX           float64
-	CarBounds      image.Rectangle
 }
 
 type OutcomingObjects struct {
-	FrontCar []*FrontCar
+	FrontCarImages []*FrontCarImages
+}
+
+type FrontCarImages struct {
+	Img       *ebiten.Image
+	ImgLights *ebiten.Image
 }
 
 type FrontCar struct {
-	Id            int
-	WidthOffset   float64
-	ScaleX        float64
-	ScaleY        float64
-	CollisionBox  image.Rectangle
-	X, Y          float64
-	Speed         float64
-	Car           *DMC
-	Img           *ebiten.Image
-	ImgName       string
-	LightsImg     *ebiten.Image
-	LightsImgName string
-}
-
-type DMC struct {
-	Color int
+	WidthOffset float64
+	ScaleX      float64
+	ScaleY      float64
+	X, Y        float64
+	Speed       float64
+	Images      *FrontCarImages
 }
 
 type Menu struct {

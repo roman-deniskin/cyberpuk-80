@@ -15,21 +15,19 @@ import (
 	"log"
 	"math"
 	"math/rand"
-	"os"
-	"runtime/pprof"
 	"strconv"
 	"time"
 )
 
 const (
-	screenWidth  = 1920
-	screenHeight = 1080
-	spawnWidth   = 960
-	spawnHeight  = 540
-)
-
-const (
-	gameStatePlaying = iota
+	screenWidth          = 1920
+	screenHeight         = 1080
+	spawnWidth           = 960
+	spawnHeight          = 540
+	initialDeceleration  = 500000000
+	spawnInterval        = 4900
+	decelerationInterval = 4900
+	gameStatePlaying     = iota
 	gameStateGameOver
 )
 
@@ -39,7 +37,7 @@ type Game struct {
 	bgIndex              int
 	bgDelay              float32
 	bgDelayMultiplier    float32
-	Car                  entity.Car
+	MainCar              entity.Car
 	OutcomingObjects     entity.OutcomingObjects
 	GamingObjects        entity.OutcomingObjects
 	isStopping           bool
@@ -53,17 +51,7 @@ type Game struct {
 	carsOnScreen         map[int]*entity.FrontCar
 	gameFont             font.Face
 	gameState            int
-}
-
-func createCar(x, y, velocityY float64, img *ebiten.Image) entity.FrontCar {
-	return entity.FrontCar{
-		CollisionBox: img.Bounds(),
-		X:            x,
-		Y:            y,
-		Car:          nil,
-		Img:          nil,
-		LightsImg:    nil,
-	}
+	nextCarId            int
 }
 
 func (g *Game) Update() error {
@@ -75,7 +63,7 @@ func (g *Game) Update() error {
 		}
 	case gameStateGameOver:
 		if ebiten.IsKeyPressed(ebiten.KeyEnter) {
-			g.restart()
+			g.startRace()
 		}
 	}
 
@@ -86,23 +74,36 @@ func (g *Game) UpdatePlaying() error {
 	g.spawnTimer += ebiten.CurrentTPS()
 	g.decelerationTimer += ebiten.CurrentTPS()
 
-	maxXCordCar := float64(screenWidth - g.Car.CarBounds.Max.X)
+	err := g.controlLogic()
+	if err != nil {
+		return err
+	}
+
+	g.updateBackground()
+	g.launchMusicPlayer()
+	g.updateOncomingCars()
+
+	return nil
+}
+
+func (g *Game) controlLogic() error {
+	maxXCordCar := float64(screenWidth - g.MainCar.CarRiddingImg.Bounds().Max.X)
 
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return errors.New("Выход по нажатию на клавишу Escape")
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		if g.Car.CarX > maxXCordCar*0.2 {
-			g.Car.CarX -= 8
+		if g.MainCar.CarX > maxXCordCar*0.2 {
+			g.MainCar.CarX -= 8
 		} else {
-			g.Car.CarX += 9
+			g.MainCar.CarX += 9
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		if g.Car.CarX < maxXCordCar*0.8 {
-			g.Car.CarX += 8
+		if g.MainCar.CarX < maxXCordCar*0.8 {
+			g.MainCar.CarX += 8
 		} else {
-			g.Car.CarX -= 9
+			g.MainCar.CarX -= 9
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyUp) {
@@ -119,6 +120,10 @@ func (g *Game) UpdatePlaying() error {
 		g.isStopping = false
 	}
 
+	return nil
+}
+
+func (g *Game) updateBackground() {
 	g.bgDelay += 1
 	if g.bgDelay >= g.bgDelayMultiplier {
 		skipFrames := 0
@@ -135,23 +140,27 @@ func (g *Game) UpdatePlaying() error {
 		}
 		g.bgDelay = 0
 	}
+}
 
+func (g *Game) launchMusicPlayer() {
 	if !g.bgmPlayer.IsPlaying() {
-		g.bgmPlayer.SetVolume(0.5) // Установите громкость музыки (0.0 - 1.0)
-		g.bgmPlayer.Rewind()       // Верните музыку в начало
-		g.bgmPlayer.Play()         // Запустите музыку
+		g.bgmPlayer.SetVolume(0.5)
+		g.bgmPlayer.Rewind()
+		g.bgmPlayer.Play()
 	}
+}
 
+func (g *Game) updateOncomingCars() {
 	// Создание машинки
 	if g.spawnTimer >= g.spawnInterval {
-		originalFrontCar := g.OutcomingObjects.FrontCar[rand.Intn(len(g.OutcomingObjects.FrontCar))]
-		g.carsOnScreen[int(time.Now().Unix())] = copyFrontCar(originalFrontCar)
-
-		// Определяем частосту спавна встречек
-		if g.spawnInterval > 1960 {
-			g.spawnInterval -= 100
-		}
+		g.carsOnScreen[g.nextCarId] = createFrontCar(g.OutcomingObjects.FrontCarImages)
+		g.nextCarId++
 		g.spawnTimer = 0
+	}
+
+	// Определяем частосту спавна встречек
+	if g.spawnInterval > 1960 {
+		g.spawnInterval -= 100
 	}
 
 	// Определяем замедление встречных машин
@@ -182,9 +191,9 @@ func (g *Game) UpdatePlaying() error {
 		}
 
 		// Проверка столкновения
-		carRect := image.Rect(int(g.Car.CarX), screenHeight-g.Car.CarBounds.Max.Y, int(g.Car.CarX)+g.Car.CarBounds.Max.X, screenHeight)
+		carRect := image.Rect(int(g.MainCar.CarX), screenHeight-g.MainCar.CarRiddingImg.Bounds().Max.Y, int(g.MainCar.CarX)+g.MainCar.CarRiddingImg.Bounds().Max.X, screenHeight)
 
-		carWidth, carHeight := car.Img.Size()
+		carWidth, carHeight := car.Images.Img.Size()
 		borderRect := image.Rect(
 			int(car.X), int(car.Y),
 			int(car.X)+int(float64(carWidth)*car.ScaleX),
@@ -195,23 +204,29 @@ func (g *Game) UpdatePlaying() error {
 			g.gameState = gameStateGameOver
 		}
 	}
-
-	return nil
 }
 
-func (g *Game) restart() {
-	g.Car.CarX = float64(screenWidth) / 2
+func (g *Game) startRace() {
 	carsOnScreen := make(map[int]*entity.FrontCar)
-	g.initialDeceleration = 500000000
-	g.spawnInterval = 4900
-	g.decelerationInterval = 4900
+
+	g.bgDelayMultiplier = 3
+	g.MainCar.CarX = float64(screenWidth) / 2
+	g.initialDeceleration = initialDeceleration
+	g.spawnInterval = spawnInterval
+	g.decelerationInterval = decelerationInterval
 	g.score = 0
 	g.carsOnScreen = carsOnScreen
 	g.gameState = gameStatePlaying
+
+	if !g.bgmPlayer.IsPlaying() {
+		g.bgmPlayer.SetVolume(0.5)
+		g.bgmPlayer.Rewind()
+		g.bgmPlayer.Play()
+	}
 }
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
-	msg := fmt.Sprintf("GAME OVER\nYOUR SCORE:  %d\nPRESS ENTER", g.score)
+	msg := fmt.Sprintf("GAME OVER\nYOUR SCORE:  %d \nPRESS ENTER", g.score)
 	x := (screenWidth - text.BoundString(g.gameFont, msg).Dx()) / 2
 	y := screenHeight / 2
 	white := color.RGBA{255, 255, 255, 255}
@@ -219,33 +234,35 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 }
 
 func (g *Game) drawScore(screen *ebiten.Image) {
-	yellow := color.RGBA{255, 255, 0, 255}                                             // желтый цвет
-	text.Draw(screen, strconv.Itoa(g.score), g.gameFont, screenWidth-200, 100, yellow) // отступы 10 пикселей сверху и слева
+	yellow := color.RGBA{255, 255, 0, 255}
+	text.Draw(screen, strconv.Itoa(g.score), g.gameFont, screenWidth-200, 100, yellow)
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	switch g.gameState {
 	case gameStatePlaying:
+		fmt.Printf("g.roadImages length: %d, g.bgIndex: %d\n", len(g.roadImages), g.bgIndex)
 		bgImg := g.roadImages[g.bgIndex]
 
 		bgOpts := &ebiten.DrawImageOptions{}
 		screen.DrawImage(bgImg, bgOpts)
 
 		carOpts := &ebiten.DrawImageOptions{}
-		car := g.Car.CarRiddingImg
+		car := g.MainCar.CarRiddingImg
 		if g.isStopping {
-			car = g.Car.CarStoppingImg
+			car = g.MainCar.CarStoppingImg
 		}
 
-		carOpts.GeoM.Translate(g.Car.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
+		carOpts.GeoM.Translate(g.MainCar.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
 		screen.DrawImage(car, carOpts)
 		g.drawScore(screen)
 
+		borderOpts := &ebiten.DrawImageOptions{}
 		for _, frontCar := range g.carsOnScreen {
-			borderOpts := &ebiten.DrawImageOptions{}
+			borderOpts.GeoM.Reset()
 			borderOpts.GeoM.Scale(frontCar.ScaleX, frontCar.ScaleY)
 			borderOpts.GeoM.Translate(frontCar.X, frontCar.Y)
-			screen.DrawImage(frontCar.Img, borderOpts)
+			screen.DrawImage(frontCar.Images.Img, borderOpts)
 		}
 	case gameStateGameOver:
 		g.drawGameOver(screen)
@@ -257,23 +274,12 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
-	// Создание файла профиля памяти
-	f, err := os.Create("mem.pprof")
+	game, err := ResourceInit()
 	if err != nil {
-		log.Fatal("Could not create memory profile: ", err)
-	}
-	defer f.Close()
-
-	startTime := time.Now()
-
-	game, err := NewGame()
-	if err != nil {
-		log.Fatalf("failed to create game: %v", err)
+		log.Fatalf("failed to init resource: %v", err)
 	}
 
-	endTime := time.Now()
-	duration := endTime.Sub(startTime)
-	fmt.Println("Время выполнения функции NewGame:", duration)
+	game.startRace()
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetWindowTitle("CyberPunk-80")
@@ -281,26 +287,19 @@ func main() {
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalf("failed to run game: %v", err)
 	}
-
-	// Запись профиля памяти
-	if err := pprof.WriteHeapProfile(f); err != nil {
-		log.Fatal("Could not write memory profile: ", err)
-	}
 }
 
-func copyFrontCar(original *entity.FrontCar) *entity.FrontCar {
+func createFrontCar(frontCarImages []*entity.FrontCarImages) *entity.FrontCar {
+	rand.Seed(time.Now().UnixNano())
+
+	carImages := frontCarImages[rand.Intn(len(frontCarImages))]
+	widthOffsets := []float64{-1000, -450, 100, 600}
+	widthOffsetRandomIndex := rand.Intn(len(widthOffsets))
+
 	return &entity.FrontCar{
-		ScaleX:        original.ScaleX,
-		ScaleY:        original.ScaleY,
-		WidthOffset:   original.WidthOffset,
-		CollisionBox:  original.CollisionBox,
-		X:             original.X,
-		Y:             original.Y,
-		Speed:         original.Speed,
-		Car:           original.Car,
-		Img:           original.Img,
-		ImgName:       original.ImgName,
-		LightsImg:     original.LightsImg,
-		LightsImgName: original.LightsImgName,
+		WidthOffset: widthOffsets[widthOffsetRandomIndex],
+		X:           screenWidth / 2,
+		Y:           screenHeight / 2,
+		Images:      carImages,
 	}
 }
