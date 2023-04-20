@@ -8,6 +8,7 @@ type Car struct {
 	CarRiddingImg  *ebiten.Image
 	CarStoppingImg *ebiten.Image
 	CarX           float64
+	CarY           float64
 }
 
 type OutcomingObjects struct {

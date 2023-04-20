@@ -8,7 +8,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"golang.org/x/image/font"
-	"image"
 	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
@@ -26,7 +25,7 @@ const (
 	spawnHeight          = 540
 	initialDeceleration  = 500000000
 	spawnInterval        = 4900
-	decelerationInterval = 4900
+	decelerationInterval = 8000
 	gameStatePlaying     = iota
 	gameStateGameOver
 )
@@ -88,6 +87,7 @@ func (g *Game) UpdatePlaying() error {
 
 func (g *Game) controlLogic() error {
 	maxXCordCar := float64(screenWidth - g.MainCar.CarRiddingImg.Bounds().Max.X)
+	maxYCordCar := float64(screenHeight - g.MainCar.CarRiddingImg.Bounds().Max.Y)
 
 	if ebiten.IsKeyPressed(ebiten.KeyF10) {
 		g.bgmPlayer.Seek(time.Minute * 2)
@@ -96,27 +96,37 @@ func (g *Game) controlLogic() error {
 		return errors.New("Выход по нажатию на клавишу Escape")
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		if g.MainCar.CarX > maxXCordCar*0.2 {
-			g.MainCar.CarX -= 8
+		if g.MainCar.CarX > maxXCordCar*0.15 {
+			g.MainCar.CarX -= 12
 		} else {
-			g.MainCar.CarX += 9
+			g.MainCar.CarX += 13
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		if g.MainCar.CarX < maxXCordCar*0.8 {
-			g.MainCar.CarX += 8
+		if g.MainCar.CarX < maxXCordCar*0.85 {
+			g.MainCar.CarX += 12
 		} else {
-			g.MainCar.CarX -= 9
+			g.MainCar.CarX -= 13
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		if g.bgDelayMultiplier > 1 {
+		/*if g.bgDelayMultiplier > 1 {
 			g.bgDelayMultiplier -= 0.01
+		}*/
+		if g.MainCar.CarY < maxYCordCar*0.20 {
+			g.MainCar.CarY += 2
+		} else {
+			g.MainCar.CarY -= 3
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		if g.bgDelayMultiplier < 4 {
+		/*if g.bgDelayMultiplier < 4 {
 			g.bgDelayMultiplier += 0.01
+		}*/
+		if g.MainCar.CarY < maxYCordCar {
+			g.MainCar.CarY -= 2
+		} else {
+			g.MainCar.CarY = maxYCordCar
 		}
 		g.isStopping = true
 	} else {
@@ -153,6 +163,40 @@ func (g *Game) launchMusicPlayer() {
 	}
 }
 
+func pixelCollision(img1 *ebiten.Image, x1, y1 int, img2 *ebiten.Image, x2, y2 int) bool {
+	width1, height1 := img1.Size()
+	width2, height2 := img2.Size()
+
+	for i1 := 0; i1 < width1; i1++ {
+		for j1 := 0; j1 < height1; j1++ {
+			r1, g1, b1, a1 := img1.At(i1, j1).RGBA()
+
+			if a1 == 0 {
+				continue
+			}
+
+			i2 := i1 - (x1 - x2)
+			j2 := j1 - (y1 - y2)
+
+			if i2 < 0 || i2 >= width2 || j2 < 0 || j2 >= height2 {
+				continue
+			}
+
+			r2, g2, b2, a2 := img2.At(i2, j2).RGBA()
+
+			if a2 == 0 {
+				continue
+			}
+
+			if r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2 {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func (g *Game) updateOncomingCars() {
 	// Создание машинки
 	if g.spawnTimer >= g.spawnInterval {
@@ -172,8 +216,8 @@ func (g *Game) updateOncomingCars() {
 			g.initialDeceleration -= 10000000
 		}
 
-		if g.decelerationInterval > 10 {
-			g.decelerationInterval -= 10
+		if g.decelerationInterval > 18 {
+			g.decelerationInterval -= 18
 		}
 
 		g.decelerationTimer = 0
@@ -194,25 +238,34 @@ func (g *Game) updateOncomingCars() {
 		}
 
 		// Проверка столкновения
-		carRect := image.Rect(int(g.MainCar.CarX), screenHeight-g.MainCar.CarRiddingImg.Bounds().Max.Y, int(g.MainCar.CarX)+g.MainCar.CarRiddingImg.Bounds().Max.X, screenHeight)
+		//carRect := image.Rect(int(g.MainCar.CarX), screenHeight-g.MainCar.CarRiddingImg.Bounds().Max.Y, int(g.MainCar.CarX)+g.MainCar.CarRiddingImg.Bounds().Max.X, screenHeight)
 
-		carWidth, carHeight := car.Images.Img.Size()
-		borderRect := image.Rect(
+		//carWidth, carHeight := car.Images.Img.Size()
+		/*borderRect := image.Rect(
 			int(car.X), int(car.Y),
 			int(car.X)+int(float64(carWidth)*car.ScaleX),
 			int(car.Y)+int(float64(carHeight)*car.ScaleY),
+		)*/
+
+		collision := pixelCollision(
+			g.MainCar.CarRiddingImg, int(g.MainCar.CarX), screenHeight-g.MainCar.CarRiddingImg.Bounds().Max.Y,
+			car.Images.Img, int(car.X), int(car.Y),
 		)
 
-		if carRect.Overlaps(borderRect) {
+		if collision {
 			g.gameState = gameStateGameOver
 		}
+
+		/*if carRect.Overlaps(borderRect) {
+			g.gameState = gameStateGameOver
+		}*/
 	}
 }
 
 func (g *Game) startRace() {
 	carsOnScreen := make(map[int]*entity.FrontCar)
 
-	g.bgDelayMultiplier = 3
+	g.bgDelayMultiplier = 2
 	g.MainCar.CarX = float64(screenWidth) / 2
 	g.initialDeceleration = initialDeceleration
 	g.spawnInterval = spawnInterval
