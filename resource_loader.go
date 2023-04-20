@@ -10,6 +10,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -142,27 +143,62 @@ func loadFrontCarImages() ([]*entity.FrontCarImages, error) {
 	return cars, nil
 }
 
+// Тип используется для музыкального плеера
+type ConcatReader struct {
+	songs []io.Reader
+	index int
+}
+
+func (c *ConcatReader) Seek(offset int64, whence int) (int64, error) {
+	if whence != 0 {
+		return int64(whence) * offset, nil
+	}
+	// Я хз зачем это нужно) Это походу количество миллисекунд, которые мы скипаем.
+	return 1 * offset, nil
+}
+
+// Используется для музыкального плеера
+func (c *ConcatReader) Read(p []byte) (n int, err error) {
+	if c.index >= len(c.songs) {
+		return 0, io.EOF
+	}
+
+	n, err = c.songs[c.index].Read(p)
+	if err == io.EOF {
+		c.index++
+		return c.Read(p)
+	}
+	return
+}
+
 func loadBackgroundMusic() (*audio.Player, error) {
 	startTime := time.Now()
 
-	audioContext := audio.NewContext(44100)
+	audioContext := audio.NewContext(22050)
 
 	rand.Seed(time.Now().UnixNano())
-	trackNames := []string{"track1.mp3", "The_Crystal_Method_-_Born_too_Slow.mp3", "Static-X_-_The_Only.mp3", "Snoop_Dogg_The_Doors_-_Riders_On_The_Storm.mp3", "Ying_Yang_Twins_Lil_Jon_The_East_Side_Boyz_-_Get_Low.mp3"}
-	trackName := rand.Intn(len(trackNames))
-	file, err := ebitenutil.OpenFile("music\\media-player\\" + trackNames[trackName])
+	trackFiles, err := ioutil.ReadDir("music\\media-player\\")
 	if err != nil {
 		return nil, err
 	}
 
-	// Декодирование аудиофайла.
-	d, err := mp3.Decode(audioContext, file)
-	if err != nil {
-		file.Close()
-		return nil, err
+	var songs []io.Reader
+	for _, trackFile := range trackFiles {
+		file, err := ebitenutil.OpenFile("music\\media-player\\" + trackFile.Name())
+		if err != nil {
+			return nil, err
+		}
+		song, err := mp3.Decode(audioContext, file)
+		if err != nil {
+			file.Close()
+			return nil, err
+		}
+		//file.Close()
+		songs = append(songs, song)
 	}
 
-	player, err := audio.NewPlayer(audioContext, d)
+	audioStream := &ConcatReader{songs: songs}
+	player, err := audioContext.NewPlayer(audioStream)
 	if err != nil {
 		return nil, err
 	}

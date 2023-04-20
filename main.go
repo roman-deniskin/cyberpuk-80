@@ -89,6 +89,9 @@ func (g *Game) UpdatePlaying() error {
 func (g *Game) controlLogic() error {
 	maxXCordCar := float64(screenWidth - g.MainCar.CarRiddingImg.Bounds().Max.X)
 
+	if ebiten.IsKeyPressed(ebiten.KeyF10) {
+		g.bgmPlayer.Seek(time.Minute * 2)
+	}
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return errors.New("Выход по нажатию на клавишу Escape")
 	}
@@ -145,7 +148,7 @@ func (g *Game) updateBackground() {
 func (g *Game) launchMusicPlayer() {
 	if !g.bgmPlayer.IsPlaying() {
 		g.bgmPlayer.SetVolume(0.5)
-		g.bgmPlayer.Rewind()
+		//g.bgmPlayer.Rewind()
 		g.bgmPlayer.Play()
 	}
 }
@@ -241,7 +244,6 @@ func (g *Game) drawScore(screen *ebiten.Image) {
 func (g *Game) Draw(screen *ebiten.Image) {
 	switch g.gameState {
 	case gameStatePlaying:
-		fmt.Printf("g.roadImages length: %d, g.bgIndex: %d\n", len(g.roadImages), g.bgIndex)
 		bgImg := g.roadImages[g.bgIndex]
 
 		bgOpts := &ebiten.DrawImageOptions{}
