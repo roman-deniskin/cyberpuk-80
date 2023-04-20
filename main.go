@@ -88,6 +88,9 @@ func (g *Game) UpdatePlaying() error {
 
 	maxXCordCar := float64(screenWidth - g.Car.CarBounds.Max.X)
 
+	if ebiten.IsKeyPressed(ebiten.KeyF10) {
+		g.bgmPlayer.Seek(time.Minute * 2)
+	}
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return errors.New("Выход по нажатию на клавишу Escape")
 	}

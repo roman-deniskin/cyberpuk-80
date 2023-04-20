@@ -161,6 +161,14 @@ type ConcatReader struct {
 	index int
 }
 
+func (c *ConcatReader) Seek(offset int64, whence int) (int64, error) {
+	if whence != 0 {
+		return int64(whence) * offset, nil
+	}
+	// Я хз зачем это нужно) Это походу количество миллисекунд, которые мы скипаем.
+	return 1 * offset, nil
+}
+
 // Используется для музыкального плеера
 func (c *ConcatReader) Read(p []byte) (n int, err error) {
 	if c.index >= len(c.songs) {
