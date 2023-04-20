@@ -138,8 +138,8 @@ func (g *Game) UpdatePlaying() error {
 
 	if !g.bgmPlayer.IsPlaying() {
 		g.bgmPlayer.SetVolume(0.5) // Установите громкость музыки (0.0 - 1.0)
-		g.bgmPlayer.Rewind()       // Верните музыку в начало
-		g.bgmPlayer.Play()         // Запустите музыку
+		//g.bgmPlayer.Rewind()       // Верните музыку в начало
+		g.bgmPlayer.Play() // Запустите музыку
 	}
 
 	// Создание машинки
