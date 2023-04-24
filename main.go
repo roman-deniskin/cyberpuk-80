@@ -110,9 +110,9 @@ func (g *Game) controlLogic() error {
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		/*if g.bgDelayMultiplier > 1 {
+		if g.bgDelayMultiplier > 1 {
 			g.bgDelayMultiplier -= 0.01
-		}*/
+		}
 		if g.MainCar.CarY < maxYCordCar*0.20 {
 			g.MainCar.CarY += 2
 		} else {
@@ -120,9 +120,9 @@ func (g *Game) controlLogic() error {
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		/*if g.bgDelayMultiplier < 4 {
+		if g.bgDelayMultiplier < 4 {
 			g.bgDelayMultiplier += 0.01
-		}*/
+		}
 		if g.MainCar.CarY < maxYCordCar {
 			g.MainCar.CarY -= 2
 		} else {
@@ -282,7 +282,16 @@ func (g *Game) startRace() {
 }
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
-	msg := fmt.Sprintf("GAME OVER\nYOUR SCORE:  %d \nPRESS ENTER", g.score)
+	bg := g.Menu.Resources.Background
+	bgOpts := &ebiten.DrawImageOptions{}
+	gameOver := g.Menu.Resources.GameOver
+	gameOverOpts := &ebiten.DrawImageOptions{}
+	gameOverX, _ := gameOver.Size()
+	gameOverOpts.GeoM.Translate(float64((screenWidth-gameOverX)/2), 100)
+
+	screen.DrawImage(bg, bgOpts)
+	screen.DrawImage(gameOver, gameOverOpts)
+	msg := fmt.Sprintf("Your score: " + strconv.Itoa(g.score))
 	x := (screenWidth - text.BoundString(g.gameFont, msg).Dx()) / 2
 	y := screenHeight / 2
 	white := color.RGBA{255, 255, 255, 255}
@@ -339,6 +348,10 @@ func main() {
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetWindowTitle("CyberPunk-80")
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
+	ebiten.SetFullscreen(true)
+	ebiten.SetWindowDecorated(false)
+	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeOnlyFullscreenEnabled)
+	ebiten.SetTPS(ebiten.SyncWithFPS)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalf("failed to run game: %v", err)
 	}

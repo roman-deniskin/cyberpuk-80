@@ -143,6 +143,40 @@ func loadFrontCarImages() ([]*entity.FrontCarImages, error) {
 	return cars, nil
 }
 
+func loadMenuResources() (entity.Resources, error) {
+	var rec entity.Resources
+	var err error
+	rec.Background, _, err = ebitenutil.NewImageFromFile("img\\menu\\background.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.GameOver, _, err = ebitenutil.NewImageFromFile("img\\menu\\game-over.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.Exit, _, err = ebitenutil.NewImageFromFile("img\\menu\\exit-game.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.NewGame, _, err = ebitenutil.NewImageFromFile("img\\menu\\new-game.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.Continue, _, err = ebitenutil.NewImageFromFile("img\\menu\\continue.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.Arrow, _, err = ebitenutil.NewImageFromFile("img\\menu\\arrow.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.Score, _, err = ebitenutil.NewImageFromFile("img\\menu\\score.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	return rec, nil
+}
+
 // Тип используется для музыкального плеера
 type ConcatReader struct {
 	songs []io.Reader
@@ -235,17 +269,43 @@ func loadGameFont() (font.Face, error) {
 	})
 }
 
+func loadMenuFont() (font.Face, error) {
+	startTime := time.Now()
+
+	fontBytes, err := ioutil.ReadFile("Yellowtail-Regular.ttf")
+	if err != nil {
+		return nil, err
+	}
+	tt, err := opentype.Parse(fontBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	const dpi = 72
+
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	fmt.Println("Время выполнения функции loadMenuFont:", duration)
+
+	return opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    48, // размер шрифта
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+}
+
 func ResourceInit() (*Game, error) {
 	var carRiddingImg, carStoppingImg *ebiten.Image
 	var frontCarImages []*entity.FrontCarImages
 	var roadImages []*ebiten.Image
 	var bgmPlayer *audio.Player
 	var gameFont font.Face
+	var recources entity.Resources
 
 	var loadErr error
 	var wg sync.WaitGroup
-	wg.Add(5)
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		carRiddingImg, carStoppingImg, loadErr = loadCarImages()
@@ -254,6 +314,7 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		frontCarImages, loadErr = loadFrontCarImages()
@@ -262,6 +323,7 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		roadImages, loadErr = loadRoadImages()
@@ -270,6 +332,7 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		bgmPlayer, loadErr = loadBackgroundMusic()
@@ -278,11 +341,30 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		gameFont, loadErr = loadGameFont()
 		if loadErr != nil {
 			loadErr = fmt.Errorf("failed to load game font: %w", loadErr)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		recources, loadErr = loadMenuResources()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load menu recources: %w", loadErr)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		recources.YellowtailRegular, loadErr = loadMenuFont()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load menu font: %w", loadErr)
 		}
 	}()
 
@@ -303,5 +385,8 @@ func ResourceInit() (*Game, error) {
 		roadImages: roadImages,
 		bgmPlayer:  bgmPlayer,
 		gameFont:   gameFont,
+		Menu: entity.Menu{
+			Resources: &recources,
+		},
 	}, nil
 }

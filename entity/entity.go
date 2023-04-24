@@ -2,6 +2,7 @@ package entity
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
+	"golang.org/x/image/font"
 )
 
 type Car struct {
@@ -32,7 +33,19 @@ type FrontCar struct {
 type Menu struct {
 	isMenuActive bool
 	settings     Settings
+	Resources    *Resources
 }
 
 type Settings struct {
+}
+
+type Resources struct {
+	Arrow             *ebiten.Image
+	Background        *ebiten.Image
+	GameOver          *ebiten.Image
+	NewGame           *ebiten.Image
+	Continue          *ebiten.Image
+	Exit              *ebiten.Image
+	Score             *ebiten.Image
+	YellowtailRegular font.Face
 }
