@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"golang.org/x/image/font"
 	"image/color"
@@ -28,6 +29,7 @@ const (
 	decelerationInterval = 8000
 	gameStatePlaying     = iota
 	gameStateGameOver
+	gameStateCloseApp
 )
 
 type Game struct {
@@ -49,6 +51,7 @@ type Game struct {
 	score                int
 	carsOnScreen         map[int]*entity.FrontCar
 	gameFont             font.Face
+	YellowtailRegular    font.Face
 	gameState            int
 	nextCarId            int
 }
@@ -61,9 +64,26 @@ func (g *Game) Update() error {
 			return err
 		}
 	case gameStateGameOver:
-		if ebiten.IsKeyPressed(ebiten.KeyEnter) {
-			g.startRace()
+		if inpututil.IsKeyJustReleased(ebiten.KeyUp) {
+			g.Menu.KeyUpReleased = true
 		}
+		if inpututil.IsKeyJustReleased(ebiten.KeyDown) {
+			g.Menu.KeyDownReleased = true
+		}
+
+		if ebiten.IsKeyPressed(ebiten.KeyEnter) {
+			g.selectItem()
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyUp) && g.Menu.KeyUpReleased {
+			g.switchMenuItem(true)
+			g.Menu.KeyUpReleased = false
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyDown) && g.Menu.KeyDownReleased {
+			g.switchMenuItem(false)
+			g.Menu.KeyDownReleased = false
+		}
+	case gameStateCloseApp:
+		return fmt.Errorf("It's not an Error, it's just exit")
 	}
 
 	return nil
@@ -96,17 +116,17 @@ func (g *Game) controlLogic() error {
 		return errors.New("Выход по нажатию на клавишу Escape")
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		if g.MainCar.CarX > maxXCordCar*0.15 {
-			g.MainCar.CarX -= 12
+		if g.MainCar.CarX > maxXCordCar*0.13 {
+			g.MainCar.CarX -= 20.1
 		} else {
-			g.MainCar.CarX += 13
+			g.MainCar.CarX += 20
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		if g.MainCar.CarX < maxXCordCar*0.85 {
-			g.MainCar.CarX += 12
+		if g.MainCar.CarX < maxXCordCar*0.87 {
+			g.MainCar.CarX += 20.1
 		} else {
-			g.MainCar.CarX -= 13
+			g.MainCar.CarX -= 20
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyUp) {
@@ -287,20 +307,19 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 	gameOver := g.Menu.Resources.GameOver
 	gameOverOpts := &ebiten.DrawImageOptions{}
 	gameOverX, _ := gameOver.Size()
-	gameOverOpts.GeoM.Translate(float64((screenWidth-gameOverX)/2), 100)
+	gameOverOpts.GeoM.Translate(float64((screenWidth-gameOverX)/2), 0)
 
 	screen.DrawImage(bg, bgOpts)
 	screen.DrawImage(gameOver, gameOverOpts)
 	msg := fmt.Sprintf("Your score: " + strconv.Itoa(g.score))
-	x := (screenWidth - text.BoundString(g.gameFont, msg).Dx()) / 2
-	y := screenHeight / 2
-	white := color.RGBA{255, 255, 255, 255}
-	text.Draw(screen, msg, g.gameFont, x, y, white)
+	yellow := color.RGBA{255, 255, 0, 255}
+	text.Draw(screen, msg, g.YellowtailRegular, (screenWidth-text.BoundString(g.YellowtailRegular, msg).Dx())/2, 310, yellow)
+	g.drawMenuItems(screen)
 }
 
 func (g *Game) drawScore(screen *ebiten.Image) {
 	yellow := color.RGBA{255, 255, 0, 255}
-	text.Draw(screen, strconv.Itoa(g.score), g.gameFont, screenWidth-200, 100, yellow)
+	text.Draw(screen, strconv.Itoa(g.score), g.YellowtailRegular, screenWidth-200, 100, yellow)
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
@@ -342,7 +361,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to init resource: %v", err)
 	}
-
+	game.InitMenu()
 	game.startRace()
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)

@@ -288,7 +288,7 @@ func loadMenuFont() (font.Face, error) {
 	fmt.Println("Время выполнения функции loadMenuFont:", duration)
 
 	return opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    48, // размер шрифта
+		Size:    72, // размер шрифта
 		DPI:     dpi,
 		Hinting: font.HintingFull,
 	})
@@ -300,6 +300,7 @@ func ResourceInit() (*Game, error) {
 	var roadImages []*ebiten.Image
 	var bgmPlayer *audio.Player
 	var gameFont font.Face
+	var YellowtailRegular font.Face
 	var recources entity.Resources
 
 	var loadErr error
@@ -362,7 +363,7 @@ func ResourceInit() (*Game, error) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		recources.YellowtailRegular, loadErr = loadMenuFont()
+		YellowtailRegular, loadErr = loadMenuFont()
 		if loadErr != nil {
 			loadErr = fmt.Errorf("failed to load menu font: %w", loadErr)
 		}
@@ -382,11 +383,14 @@ func ResourceInit() (*Game, error) {
 		OutcomingObjects: entity.OutcomingObjects{
 			FrontCarImages: frontCarImages,
 		},
-		roadImages: roadImages,
-		bgmPlayer:  bgmPlayer,
-		gameFont:   gameFont,
+		roadImages:        roadImages,
+		bgmPlayer:         bgmPlayer,
+		gameFont:          gameFont,
+		YellowtailRegular: YellowtailRegular,
 		Menu: entity.Menu{
-			Resources: &recources,
+			Resources:       &recources,
+			KeyUpReleased:   true,
+			KeyDownReleased: true,
 		},
 	}, nil
 }
