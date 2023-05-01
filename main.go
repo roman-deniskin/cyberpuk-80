@@ -117,17 +117,17 @@ func (g *Game) controlLogic() error {
 		return errors.New("Выход по нажатию на клавишу Escape")
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		if g.MainCar.CarX > maxXCordCar*0.13 {
-			g.MainCar.CarX -= 20.1
+		if g.MainCar.CarX > maxXCordCar*0.15 {
+			g.MainCar.CarX -= 12
 		} else {
-			g.MainCar.CarX += 20
+			g.MainCar.CarX += 13
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		if g.MainCar.CarX < maxXCordCar*0.87 {
-			g.MainCar.CarX += 20.1
+		if g.MainCar.CarX < maxXCordCar*0.85 {
+			g.MainCar.CarX += 12
 		} else {
-			g.MainCar.CarX -= 20
+			g.MainCar.CarX -= 13
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyUp) {
@@ -370,7 +370,7 @@ func main() {
 	ebiten.SetFullscreen(true)
 	ebiten.SetWindowDecorated(false)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeOnlyFullscreenEnabled)
-	ebiten.SetTPS(ebiten.SyncWithFPS)
+	//ebiten.SetTPS(ebiten.SyncWithFPS)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalf("failed to run game: %v", err)
 	}
