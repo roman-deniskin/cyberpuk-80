@@ -8,6 +8,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"golang.org/x/image/font"
+	"image"
 	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
@@ -163,33 +164,38 @@ func (g *Game) launchMusicPlayer() {
 	}
 }
 
-func pixelCollision(img1 *ebiten.Image, x1, y1 int, img2 *ebiten.Image, x2, y2 int) bool {
-	width1, height1 := img1.Size()
-	width2, height2 := img2.Size()
+func pixelCollision(car1 *ebiten.Image, x1, y1 int, car2 *ebiten.Image, x2, y2 int, scale float64) bool {
+	car1Width, car1Height := car1.Size()
+	car2Width, car2Height := car2.Size()
 
-	for i1 := 0; i1 < width1; i1++ {
-		for j1 := 0; j1 < height1; j1++ {
-			r1, g1, b1, a1 := img1.At(i1, j1).RGBA()
+	car2Width = int(float64(car2Width) * scale)
+	car2Height = int(float64(car2Height) * scale)
 
-			if a1 == 0 {
-				continue
-			}
+	rect1 := image.Rect(x1, y1, x1+car1Width, y1+car1Height)
+	rect2 := image.Rect(x2, y2, x2+car2Width, y2+car2Height)
 
-			i2 := i1 - (x1 - x2)
-			j2 := j1 - (y1 - y2)
+	if !rect1.Overlaps(rect2) {
+		return false
+	}
 
-			if i2 < 0 || i2 >= width2 || j2 < 0 || j2 >= height2 {
-				continue
-			}
+	intersection := rect1.Intersect(rect2)
 
-			r2, g2, b2, a2 := img2.At(i2, j2).RGBA()
+	for y := intersection.Min.Y; y < intersection.Max.Y; y++ {
+		for x := intersection.Min.X; x < intersection.Max.X; x++ {
+			xInCar1 := x - x1
+			yInCar1 := y - y1
 
-			if a2 == 0 {
-				continue
-			}
+			_, _, _, a1 := car1.At(xInCar1, yInCar1).RGBA()
 
-			if r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2 {
-				return true
+			if a1 != 0 {
+				xInCar2 := int(float64(x-x2) / scale)
+				yInCar2 := int(float64(y-y2) / scale)
+
+				_, _, _, a2 := car2.At(xInCar2, yInCar2).RGBA()
+
+				if a2 != 0 {
+					return true
+				}
 			}
 		}
 	}
@@ -206,7 +212,7 @@ func (g *Game) updateOncomingCars() {
 	}
 
 	// Определяем частосту спавна встречек
-	if g.spawnInterval > 1960 {
+	if g.spawnInterval > 3920 {
 		g.spawnInterval -= 100
 	}
 
@@ -237,28 +243,20 @@ func (g *Game) updateOncomingCars() {
 			delete(g.carsOnScreen, i)
 		}
 
-		// Проверка столкновения
-		//carRect := image.Rect(int(g.MainCar.CarX), screenHeight-g.MainCar.CarRiddingImg.Bounds().Max.Y, int(g.MainCar.CarX)+g.MainCar.CarRiddingImg.Bounds().Max.X, screenHeight)
+		if car.Y > 800 {
+			collision := pixelCollision(
+				g.MainCar.CarRiddingImg,
+				int(g.MainCar.CarX),
+				int(screenHeight-g.MainCar.CarY-float64(g.MainCar.CarRiddingImg.Bounds().Dy())),
+				car.Images.Img,
+				int(car.X),
+				int(car.Y),
+				scaleCoef)
 
-		//carWidth, carHeight := car.Images.Img.Size()
-		/*borderRect := image.Rect(
-			int(car.X), int(car.Y),
-			int(car.X)+int(float64(carWidth)*car.ScaleX),
-			int(car.Y)+int(float64(carHeight)*car.ScaleY),
-		)*/
-
-		collision := pixelCollision(
-			g.MainCar.CarRiddingImg, int(g.MainCar.CarX), screenHeight-g.MainCar.CarRiddingImg.Bounds().Max.Y,
-			car.Images.Img, int(car.X), int(car.Y),
-		)
-
-		if collision {
-			g.gameState = gameStateGameOver
+			if collision {
+				g.gameState = gameStateGameOver
+			}
 		}
-
-		/*if carRect.Overlaps(borderRect) {
-			g.gameState = gameStateGameOver
-		}*/
 	}
 }
 
@@ -308,16 +306,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			car = g.MainCar.CarStoppingImg
 		}
 
-		carOpts.GeoM.Translate(g.MainCar.CarX, float64(screen.Bounds().Dy()-car.Bounds().Dy()))
+		carX, carY := g.MainCar.CarX, float64(screenHeight-g.MainCar.CarRiddingImg.Bounds().Dy())
+		carOpts.GeoM.Translate(carX, carY)
 		screen.DrawImage(car, carOpts)
 		g.drawScore(screen)
 
-		borderOpts := &ebiten.DrawImageOptions{}
+		frontCarOpts := &ebiten.DrawImageOptions{}
 		for _, frontCar := range g.carsOnScreen {
-			borderOpts.GeoM.Reset()
-			borderOpts.GeoM.Scale(frontCar.ScaleX, frontCar.ScaleY)
-			borderOpts.GeoM.Translate(frontCar.X, frontCar.Y)
-			screen.DrawImage(frontCar.Images.Img, borderOpts)
+			frontCarOpts.GeoM.Reset()
+			frontCarOpts.GeoM.Scale(frontCar.ScaleX, frontCar.ScaleY)
+			frontCarOpts.GeoM.Translate(frontCar.X, frontCar.Y)
+			screen.DrawImage(frontCar.Images.Img, frontCarOpts)
 		}
 	case gameStateGameOver:
 		g.drawGameOver(screen)
