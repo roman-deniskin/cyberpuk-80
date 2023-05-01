@@ -2,6 +2,7 @@ package main
 
 import (
 	"cyberpuk-80/entity"
+	"cyberpuk-80/utils"
 	"errors"
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -10,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+	"image"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -92,7 +94,7 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 	for res := range resultChan {
 		if res.err != nil {
 			err = res.err
-			fmt.Println(err)
+			utils.MessageBox("Error", err.Error(), utils.MB_ICONERROR)
 		}
 		roadImages[res.index] = res.img
 	}
@@ -294,6 +296,23 @@ func loadMenuFont() (font.Face, error) {
 	})
 }
 
+func loadIcon() {
+	// Загружаем иконку из файла.
+	iconFile, err := os.Open("img\\icon.png")
+	if err != nil {
+		utils.MessageBox("Error", err.Error(), utils.MB_ICONERROR)
+	}
+	defer iconFile.Close()
+
+	iconImage, _, err := image.Decode(iconFile)
+	if err != nil {
+		utils.MessageBox("Error", err.Error(), utils.MB_ICONERROR)
+	}
+
+	// Устанавливаем иконку окна.
+	ebiten.SetWindowIcon([]image.Image{iconImage})
+}
+
 func ResourceInit() (*Game, error) {
 	var carRiddingImg, carStoppingImg *ebiten.Image
 	var frontCarImages []*entity.FrontCarImages
@@ -372,6 +391,7 @@ func ResourceInit() (*Game, error) {
 	wg.Wait()
 
 	if loadErr != nil {
+		utils.MessageBox("Error", loadErr.Error(), utils.MB_ICONERROR)
 		return nil, loadErr
 	}
 

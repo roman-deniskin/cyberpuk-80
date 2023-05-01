@@ -357,6 +357,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
+	loadIcon()
 	game, err := ResourceInit()
 	if err != nil {
 		log.Fatalf("failed to init resource: %v", err)
