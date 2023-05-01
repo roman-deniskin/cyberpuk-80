@@ -2,6 +2,7 @@ package main
 
 import (
 	"cyberpuk-80/entity"
+	"cyberpuk-80/utils"
 	"errors"
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -10,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+	"image"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -92,7 +94,7 @@ func loadRoadImages() ([]*ebiten.Image, error) {
 	for res := range resultChan {
 		if res.err != nil {
 			err = res.err
-			fmt.Println(err)
+			utils.MessageBox("Error", err.Error(), utils.MB_ICONERROR)
 		}
 		roadImages[res.index] = res.img
 	}
@@ -141,6 +143,40 @@ func loadFrontCarImages() ([]*entity.FrontCarImages, error) {
 	fmt.Println("Время выполнения функции loadFrontCars:", duration)
 
 	return cars, nil
+}
+
+func loadMenuResources() (entity.Resources, error) {
+	var rec entity.Resources
+	var err error
+	rec.Background, _, err = ebitenutil.NewImageFromFile("img\\menu\\background.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.GameOver, _, err = ebitenutil.NewImageFromFile("img\\menu\\game-over.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.Exit, _, err = ebitenutil.NewImageFromFile("img\\menu\\exit-game.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.NewGame, _, err = ebitenutil.NewImageFromFile("img\\menu\\new-game.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.Continue, _, err = ebitenutil.NewImageFromFile("img\\menu\\continue.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.Arrow, _, err = ebitenutil.NewImageFromFile("img\\menu\\arrow.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	rec.Score, _, err = ebitenutil.NewImageFromFile("img\\menu\\score.png")
+	if err != nil {
+		return entity.Resources{}, err
+	}
+	return rec, nil
 }
 
 // Тип используется для музыкального плеера
@@ -235,17 +271,61 @@ func loadGameFont() (font.Face, error) {
 	})
 }
 
+func loadMenuFont() (font.Face, error) {
+	startTime := time.Now()
+
+	fontBytes, err := ioutil.ReadFile("Yellowtail-Regular.ttf")
+	if err != nil {
+		return nil, err
+	}
+	tt, err := opentype.Parse(fontBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	const dpi = 72
+
+	endTime := time.Now()
+	duration := endTime.Sub(startTime)
+	fmt.Println("Время выполнения функции loadMenuFont:", duration)
+
+	return opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    72, // размер шрифта
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+}
+
+func loadIcon() {
+	// Загружаем иконку из файла.
+	iconFile, err := os.Open("img\\icon.png")
+	if err != nil {
+		utils.MessageBox("Error", err.Error(), utils.MB_ICONERROR)
+	}
+	defer iconFile.Close()
+
+	iconImage, _, err := image.Decode(iconFile)
+	if err != nil {
+		utils.MessageBox("Error", err.Error(), utils.MB_ICONERROR)
+	}
+
+	// Устанавливаем иконку окна.
+	ebiten.SetWindowIcon([]image.Image{iconImage})
+}
+
 func ResourceInit() (*Game, error) {
 	var carRiddingImg, carStoppingImg *ebiten.Image
 	var frontCarImages []*entity.FrontCarImages
 	var roadImages []*ebiten.Image
 	var bgmPlayer *audio.Player
 	var gameFont font.Face
+	var YellowtailRegular font.Face
+	var recources entity.Resources
 
 	var loadErr error
 	var wg sync.WaitGroup
-	wg.Add(5)
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		carRiddingImg, carStoppingImg, loadErr = loadCarImages()
@@ -254,6 +334,7 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		frontCarImages, loadErr = loadFrontCarImages()
@@ -262,6 +343,7 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		roadImages, loadErr = loadRoadImages()
@@ -270,6 +352,7 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		bgmPlayer, loadErr = loadBackgroundMusic()
@@ -278,6 +361,7 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		gameFont, loadErr = loadGameFont()
@@ -286,9 +370,28 @@ func ResourceInit() (*Game, error) {
 		}
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		recources, loadErr = loadMenuResources()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load menu recources: %w", loadErr)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		YellowtailRegular, loadErr = loadMenuFont()
+		if loadErr != nil {
+			loadErr = fmt.Errorf("failed to load menu font: %w", loadErr)
+		}
+	}()
+
 	wg.Wait()
 
 	if loadErr != nil {
+		utils.MessageBox("Error", loadErr.Error(), utils.MB_ICONERROR)
 		return nil, loadErr
 	}
 
@@ -300,8 +403,14 @@ func ResourceInit() (*Game, error) {
 		OutcomingObjects: entity.OutcomingObjects{
 			FrontCarImages: frontCarImages,
 		},
-		roadImages: roadImages,
-		bgmPlayer:  bgmPlayer,
-		gameFont:   gameFont,
+		roadImages:        roadImages,
+		bgmPlayer:         bgmPlayer,
+		gameFont:          gameFont,
+		YellowtailRegular: YellowtailRegular,
+		Menu: entity.Menu{
+			Resources:       &recources,
+			KeyUpReleased:   true,
+			KeyDownReleased: true,
+		},
 	}, nil
 }
