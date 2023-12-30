@@ -1,7 +1,7 @@
 package main
 
 import (
-	"cyberpuk-80/entity"
+	"cyberpunk_new/entity"
 	"errors"
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"

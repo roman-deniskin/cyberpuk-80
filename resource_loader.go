@@ -1,8 +1,8 @@
 package main
 
 import (
-	"cyberpuk-80/entity"
-	"cyberpuk-80/utils"
+	"cyberpunk_new/entity"
+	"cyberpunk_new/utils"
 	"errors"
 	"fmt"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -213,14 +213,14 @@ func loadBackgroundMusic() (*audio.Player, error) {
 	audioContext := audio.NewContext(22050)
 
 	rand.Seed(time.Now().UnixNano())
-	trackFiles, err := ioutil.ReadDir("music\\media-player\\")
+	trackFiles, err := ioutil.ReadDir("resources\\music\\media-player\\")
 	if err != nil {
 		return nil, err
 	}
 
 	var songs []io.Reader
 	for _, trackFile := range trackFiles {
-		file, err := ebitenutil.OpenFile("music\\media-player\\" + trackFile.Name())
+		file, err := ebitenutil.OpenFile("resources\\music\\media-player\\" + trackFile.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +249,7 @@ func loadBackgroundMusic() (*audio.Player, error) {
 func loadGameFont() (font.Face, error) {
 	startTime := time.Now()
 
-	fontBytes, err := ioutil.ReadFile("Mario-Kart-DS.ttf")
+	fontBytes, err := ioutil.ReadFile("resources\\fonts\\Mario-Kart-DS.ttf")
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func loadGameFont() (font.Face, error) {
 func loadMenuFont() (font.Face, error) {
 	startTime := time.Now()
 
-	fontBytes, err := ioutil.ReadFile("Yellowtail-Regular.ttf")
+	fontBytes, err := ioutil.ReadFile("resources\\fonts\\Yellowtail-Regular.ttf")
 	if err != nil {
 		return nil, err
 	}
@@ -322,77 +322,92 @@ func ResourceInit() (*Game, error) {
 	var YellowtailRegular font.Face
 	var recources entity.Resources
 
-	var loadErr error
+	errChan := make(chan error, 10) // Создаем канал для ошибок
 	var wg sync.WaitGroup
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		carRiddingImg, carStoppingImg, loadErr = loadCarImages()
-		if loadErr != nil {
-			loadErr = fmt.Errorf("failed to load car image: %w", loadErr)
+		var err error
+		carRiddingImg, carStoppingImg, err = loadCarImages()
+		if err != nil {
+			errChan <- fmt.Errorf("failed to load car image: %w", err)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		frontCarImages, loadErr = loadFrontCarImages()
-		if loadErr != nil {
-			loadErr = fmt.Errorf("failed to load border image: %w", loadErr)
+		var err error
+		frontCarImages, err = loadFrontCarImages()
+		if err != nil {
+			errChan <- fmt.Errorf("failed to load border image: %w", err)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		roadImages, loadErr = loadRoadImages()
-		if loadErr != nil {
-			loadErr = fmt.Errorf("failed to load road images: %w", loadErr)
+		var err error
+		roadImages, err = loadRoadImages()
+		if err != nil {
+			errChan <- fmt.Errorf("failed to load road images: %w", err)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		bgmPlayer, loadErr = loadBackgroundMusic()
-		if loadErr != nil {
-			loadErr = fmt.Errorf("failed to load background music: %w", loadErr)
+		var err error
+		bgmPlayer, err = loadBackgroundMusic()
+		if err != nil {
+			errChan <- fmt.Errorf("failed to load background music: %w", err)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		gameFont, loadErr = loadGameFont()
-		if loadErr != nil {
-			loadErr = fmt.Errorf("failed to load game font: %w", loadErr)
+		var err error
+		gameFont, err = loadGameFont()
+		if err != nil {
+			errChan <- fmt.Errorf("failed to load game font: %w", err)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		recources, loadErr = loadMenuResources()
-		if loadErr != nil {
-			loadErr = fmt.Errorf("failed to load menu recources: %w", loadErr)
+		var err error
+		recources, err = loadMenuResources()
+		if err != nil {
+			errChan <- fmt.Errorf("failed to load menu recources: %w", err)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		YellowtailRegular, loadErr = loadMenuFont()
-		if loadErr != nil {
-			loadErr = fmt.Errorf("failed to load menu font: %w", loadErr)
+		var err error
+		YellowtailRegular, err = loadMenuFont()
+		if err != nil {
+			errChan <- fmt.Errorf("failed to load menu font: %w", err)
 		}
 	}()
 
 	wg.Wait()
+	close(errChan)
 
-	if loadErr != nil {
-		utils.MessageBox("Error", loadErr.Error(), utils.MB_ICONERROR)
-		return nil, loadErr
+	var hasErrors bool
+	// Проверяем канал ошибок
+	for err := range errChan {
+		if err != nil {
+			hasErrors = true // Устанавливаем флаг, если есть ошибка
+			utils.MessageBox("Error", err.Error(), utils.MB_ICONERROR)
+		}
+	}
+	if hasErrors {
+		return nil, fmt.Errorf("возникли ошибки во время инициализации")
 	}
 
 	return &Game{
